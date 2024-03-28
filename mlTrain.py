@@ -83,7 +83,7 @@ def calculate_area(lat1, lon1, lat2, lon2, lat3, lon3):
 
 
 def home_page():
-    st.markdown("<h1 style='color:green;'>Detection System - SIM Swap</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color:green;'>SS Detection System</h1>", unsafe_allow_html=True)
     st.markdown("<h2 style='color:orange;'>Welcome to the Home Page.</h1>", unsafe_allow_html=True)
     st.write("Navigate to different sections using the sidebar.")
 
