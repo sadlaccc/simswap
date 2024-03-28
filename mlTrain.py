@@ -3,7 +3,7 @@ import pandas as pd
 import folium
 import math
 from streamlit_folium import folium_static
-
+!pip install streamlit_folium
 # Fixed file locations
 file_location_1 = 'location of connectivity.csv'  # Location of the csv file with connectivity data
 file_location_2 = 'location of request.csv'  # Location of the csv file with request data
