@@ -244,7 +244,7 @@ def main():
         st.session_state.authenticated = False
 
     if not st.session_state.authenticated:
-        st.markdown("<h1 style='color:green;'>Detection System - SIM Swap.</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='color:green;'>SS - Detection System.</h1>", unsafe_allow_html=True)
         st.markdown("<h1 style='color:orange;'>Sign In.</h1>", unsafe_allow_html=True)
 
         # Sidebar for authentication
