@@ -281,7 +281,7 @@ def main():
         maps_button_key = "maps_button_key"  # Unique key for the maps button
         search_button_key = "search_button_key"  # Unique key for the search button
 
-        selected_page = st.sidebar.radio("Select Page", ["Home", "Maps", "Search"])
+        selected_page = st.sidebar.radio("Select Page", ["Home", "Search"])
 
         if selected_page == "Home":
             home_page()
