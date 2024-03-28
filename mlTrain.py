@@ -7,7 +7,7 @@ from streamlit_folium import folium_static
 # Fixed file locations
 file_location_1 = 'location of connectivity.csv'  # Location of the csv file with connectivity data
 file_location_2 = 'location of request.csv'  # Location of the csv file with request data
-file_location_3 = 'Location of transaction.csv'  # Location of the csv file with transaction data
+file_location_3 = 'location of transaction.csv'  # Location of the csv file with transaction data
 
 def load_data(file_path, file_name):
     data = pd.read_csv(file_path)
