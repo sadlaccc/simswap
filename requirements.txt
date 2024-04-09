@@ -1,5 +1,7 @@
-streamlit
-pandas
-numpy
+streamlit as st
+pandas as pd
 folium
-streamlit_folium
+math
+matplotlib
+streamlit_folium 
+folium_static
