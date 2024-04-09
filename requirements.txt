@@ -1,6 +1,5 @@
 streamlit
 pandas
-folium
 math
 matplotlib
 streamlit_folium 
