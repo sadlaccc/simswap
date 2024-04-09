@@ -305,7 +305,7 @@ def search_page(data_1, data_2, data_3, lat_column_1, lon_column_1, lat_column_2
                 
                 #Display the Area Covered
                 st.write("### The area covered:")
-                st.markdown(f"<p style='font-size:20px'>{area_covered,}, "Squared Kilometres", </p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size:20px'>{area_covered,}</p>", unsafe_allow_html=True)
                 
                 
 
