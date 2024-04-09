@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import folium
 import math
+import matplotlib.pyplot as plt
 from streamlit_folium import folium_static
 
 # Fixed file locations
@@ -164,23 +165,21 @@ def search_page(data_1, data_2, data_3, lat_column_1, lon_column_1, lat_column_2
                 # Plot recent transaction location
                 recent_transaction_lat = data_3[lat_column_3].mean()
                 recent_transaction_lon = data_3[lon_column_3].mean()
-                recent_transaction_name = data_3['Location Name'].iloc[0]  # Assuming the column name is 'Location Name'
+                recent_transaction_name = data_3['Location Name'].iloc[0]  # 'Location Name'
                 folium.Marker([recent_transaction_lat, recent_transaction_lon], popup=f"{recent_transaction_name}",
                             icon=folium.Icon(color='blue')).add_to(my_map)
 
                 # Plot connectivity location
                 connectivity_lat = data_1[lat_column_1].mean()
                 connectivity_lon = data_1[lon_column_1].mean()
-                connectivity_name = data_1['Location Name'].iloc[0]  # Assuming the column name is 'Location Name'
+                connectivity_name = data_1['Location Name'].iloc[0]  #  'Location Name'
                 folium.Marker([connectivity_lat, connectivity_lon], popup=f"{connectivity_name}",
                             icon=folium.Icon(color='red')).add_to(my_map)
 
                 # Plot search result locations
                 for index, row in combined_search_data.iterrows():
                     location_name = row['Location Name']  # Assuming the column name is 'Location Name'
-                    folium.Marker([row[lat_column_1], row[lon_column_1]], popup=f"Location: {location_name}",
-                                icon=folium.Icon(color='orange')).add_to(my_map)
-
+                    
                 # Draw lines to form a triangle between locations
                 folium.PolyLine(locations=[[selected_lat, selected_lon], [recent_transaction_lat, recent_transaction_lon]],
                                 color='black', weight=2.5, opacity=1).add_to(my_map)
@@ -194,21 +193,124 @@ def search_page(data_1, data_2, data_3, lat_column_1, lon_column_1, lat_column_2
                 # Display the map
                 folium_static(my_map)
 
+                
+                st.write("### Distances:")# Create a dictionary with the data
+                data = {
+                    "Type of Location": [f"Location of Request of Request of S.S)", f"Location of Recent Transaction)", "Location of Recent Connectivity"],
+                    "Addresses": [selected_location, recent_transaction_name, connectivity_name],
+                    "Name. (Analysis.)": ["A", "B", "C"]
+                }
+               
                 # Calculate distances and area, and display them
                 distance_to_connectivity = calculate_distance(selected_lat, selected_lon, connectivity_lat, connectivity_lon)
                 distance_to_transaction = calculate_distance(selected_lat, selected_lon, recent_transaction_lat, recent_transaction_lon)
                 distance_between_locations = calculate_distance(recent_transaction_lat, recent_transaction_lon, connectivity_lat, connectivity_lon)
                 area_covered = calculate_area(selected_lat, selected_lon, recent_transaction_lat, recent_transaction_lon, connectivity_lat, connectivity_lon)
+                
+                # Create a DataFrame from the dictionary
+                df = pd.DataFrame(data)
+                # Create a dictionary with the location names and their corresponding codes
+                location_data = {
+                    
+                    "Location Code": ["A", "B", "C"]
+                }
 
-                st.write("### Distances:")
-                st.write(f"Distance to the location of most recent connectivity ({selected_location}): {distance_to_connectivity:.2f} km")
-                st.write(f"Distance to the location of recent transaction: {distance_to_transaction:.2f} km")
-                st.write(f"Distance between the recent transaction and connectivity locations: {distance_between_locations:.2f} km")
-                st.write("### Area Covered:")
-                st.write(f"The area covered by the triangle formed by the three locations is: {area_covered:.2f} square kilometers")
+                # Create a DataFrame from the location data
+                location_df = pd.DataFrame(location_data)
+
+                # Create a dictionary with the distance data
+                distance_data = {
+                    "From": ["A", "A", "B"],
+                    "To": ["B", "C", "C"],
+                    "Distance (km)": [distance_to_transaction, distance_to_connectivity, distance_between_locations]
+                }
+
+                # Create a DataFrame from the distance data
+                distance_df = pd.DataFrame(distance_data)
+
+               
+                # Create a new DataFrame combining the location names and distances
+                combined_df = pd.merge(distance_df, location_df, left_on='From', right_on='Location Code', how='left')
+                combined_df.rename(columns={'Location Name': 'From Name', 'Location Code': 'From '}, inplace=True)
+                combined_df = pd.merge(combined_df, location_df, left_on='To', right_on='Location Code', how='left')
+                combined_df.rename(columns={'Location Name': 'To Name', 'Location Code': 'To '}, inplace=True)
+
+                # Rearrange the columns
+                combined_df = combined_df[['From', 'To', 'Distance (km)']]
+
+                # Display all columns
+                 # Display the combined DataFrame as a table
+                st.write("Location Names and Distances:")
+                st.write(df)
+                st.write("Distances Between Locations")
+                st.write(combined_df)
+
+       
+                # Define location names
+                location_names = ["Location of Request", "Location of Transaction", "Location of Connectivity"]
+
+                # Define the distances
+                distances = [distance_to_transaction, distance_to_connectivity, distance_between_locations]
+
+                # Find the longest distance and its index
+                max_distance_index = distances.index(max(distances))
+
+                # Define the coordinates of the vertices based on the longest distance
+                if max_distance_index == 0:
+                    # Transaction to Connectivity is the longest distance
+                    B = (0, 0)
+                    A = (distances[0], 0)
+                    C = (distances[2], distances[1])
+                elif max_distance_index == 1:
+                    # Request to Connectivity is the longest distance
+                    C = (0, 0)
+                    A = (distances[2], 0)
+                    B = (distances[0], distances[1])
+                else:
+                    # Request to Transaction is the longest distance
+                    A = (0, 0)
+                    B = (distances[1], 0)
+                    C = (distances[0], distances[2])
+
+                # Plot the triangle
+                fig, ax = plt.subplots(figsize=(10, 8))
+                ax.plot([A[0], B[0]], [A[1], B[1]], 'b-', label=f'Distance AB: {format(distances[0], ".2f")} km')  # Line AB
+                ax.plot([B[0], C[0]], [B[1], C[1]], 'r-', label=f'Distance BC: {format(distances[1], ".2f")}km')  # Line BC
+                ax.plot([C[0], A[0]], [C[1], A[1]], 'g-', label=f'Distance CA: {format(distances[2], ".2f")}km')  # Line CA
+                ax.plot(A[0], A[1], 'ko')  # Point A
+                ax.text(A[0], A[1], 'A\n' + location_names[0], ha='right', va='bottom')
+                ax.plot(B[0], B[1], 'ko')  # Point B
+                ax.text(B[0], B[1], 'B\n' + location_names[1], ha='right', va='top')
+                ax.plot(C[0], C[1], 'ko')  # Point C
+                ax.text(C[0], C[1], 'C\n' + location_names[2], ha='left', va='top')
+
+                # Set axis labels
+                ax.set_xlabel('X (km)')
+                ax.set_ylabel('Y (km)')
+
+                # Set aspect ratio to equal
+                ax.set_aspect('equal', adjustable='box')
+
+                # Show grid lines
+                ax.grid(True)
+
+                # Add legend
+                ax.legend()
+
+                # Add title
+                ax.set_title('Triangle formed by the three locations')
+
+                # Show plot
+                st.pyplot(fig)
+                
+                #Display the Area Covered
+                st.write("### The area covered:")
+                st.markdown(f"<p style='font-size:20px'>{area_covered, "Squared Kilometres"}</p>", unsafe_allow_html=True)
+                
+                
 
                 # Perform SIM swap and display results (if applicable)
-                if distance_to_transaction > 100:
+                if distance_to_transaction > 1000:
                     st.warning("SIM swap is not allowed due to location variance.")
                 else:
                     # Display search results
@@ -236,6 +338,7 @@ def search_page(data_1, data_2, data_3, lat_column_1, lon_column_1, lat_column_2
                             st.error(f"ID number {id_number} is not valid for SIM swap.")
                     else:
                         st.warning("Please enter a valid ID number.")
+                    
 
 def main():
     st.set_page_config(page_title="SIM Swap Detection.", page_icon=":earth_americas:")
