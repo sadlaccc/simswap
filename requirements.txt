@@ -3,5 +3,3 @@ pandas as pd
 folium
 math
 matplotlib
-streamlit_folium 
-folium_static
