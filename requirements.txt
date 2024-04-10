@@ -1,5 +1,5 @@
 streamlit
 pandas
-from streamlit_folium import folium_static
+streamlit_folium
 math
 matplotlib
