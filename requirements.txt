@@ -2,4 +2,4 @@ streamlit
 pandas
 streamlit_folium
 math
-matplotlib
+matplotlib==3.5.2
