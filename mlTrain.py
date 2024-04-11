@@ -178,7 +178,7 @@ def search_page(data_1, data_2, data_3, lat_column_1, lon_column_1, lat_column_2
 
                 # Plot search result locations
                 for index, row in combined_search_data.iterrows():
-                    location_name = row['Location Name']  # Assuming the column name is 'Location Name'
+                    location_name = row['Location Name']  # the column name is 'Location Name'
                     
                 # Draw lines to form a triangle between locations
                 folium.PolyLine(locations=[[selected_lat, selected_lon], [recent_transaction_lat, recent_transaction_lon]],
