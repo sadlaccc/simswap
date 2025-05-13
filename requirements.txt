@@ -1,6 +1,8 @@
-streamlit==1.24.1
-pandas>2.0
-numpy<=1.25.1
-streamlit_folium
-matplotlib==3.5.2
-math==3.5
+time
+streamlit
+pandas
+folium
+random
+math
+datetime
+matplotlib
