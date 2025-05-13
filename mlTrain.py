@@ -1,7 +1,12 @@
+import time
+start_time = time.time()
 import streamlit as st
 import pandas as pd
 import folium
+import random
 import math
+import datetime
+from datetime import datetime
 import matplotlib.pyplot as plt
 from streamlit_folium import folium_static
 
@@ -82,10 +87,45 @@ def calculate_area(lat1, lon1, lat2, lon2, lat3, lon3):
 
     return area
 
+def calculate_search_speed(start_date_request, start_time_request, end_date_connectivity, end_time_connectivity, distance):
+    # Combine date and time strings to create datetime objects
+    start_datetime_str = f"{start_date_request} {start_time_request}"
+    end_datetime_str = f"{end_date_connectivity} {end_time_connectivity}"
+    
+    # Convert datetime strings to datetime objects
+    start_datetime = datetime.strptime(start_datetime_str, "%m/%d/%Y %H:%M")
+    end_datetime = datetime.strptime(end_datetime_str, "%m/%d/%Y %H:%M")
+    
+    # Calculate the time taken for the search operation in seconds
+    time_taken = (end_datetime - start_datetime).total_seconds()
+    
+    # Calculate the speed in km/h
+    speed = (distance / 1000) / (time_taken / 3600)
+    
+    return speed
+
+def verify_sim_swap(request_df, connectivity_df, transaction_df, threshold_speed):
+    request_time = datetime.strptime(request_df['Date'].iloc[0] + ' ' + request_df['Time'].iloc[0], '%m/%d/%Y %H:%M')
+    connectivity_time = datetime.strptime(connectivity_df['Date'].iloc[0] + ' ' + connectivity_df['Time'].iloc[0], '%m/%d/%Y %H:%M')
+    transaction_time = datetime.strptime(transaction_df['Date'].iloc[0] + ' ' + transaction_df['Time'].iloc[0], '%m/%d/%Y %H:%M')
+
+    distance_req_conn = calculate_distance(request_df['Latitude'].iloc[0], request_df['Longitude'].iloc[0], connectivity_df['Latitude'].iloc[0], connectivity_df['Longitude'].iloc[0])
+    distance_req_trans = calculate_distance(request_df['Latitude'].iloc[0], request_df['Longitude'].iloc[0], transaction_df['Latitude'].iloc[0], transaction_df['Longitude'].iloc[0])
+
+    time_diff_conn = (request_time - connectivity_time).total_seconds() / 3600  # in hours
+    time_diff_trans = (request_time - transaction_time).total_seconds() / 3600  # in hours
+
+    if request_time > connectivity_time:
+        speed = distance_req_trans / time_diff_trans if time_diff_trans != 0 else float('inf')
+    else:
+        speed = distance_req_conn / time_diff_conn if time_diff_conn != 0 else float('inf')
+
+    validity = "valid" if speed <= threshold_speed else "suspicious"
+
+    return speed, distance_req_conn, distance_req_trans, validity
 
 def home_page():
-    st.markdown("<h1 style='color:green;'>SS Detection System</h1>", unsafe_allow_html=True)
-    st.markdown("<h2 style='color:orange;'>Welcome to the Home Page.</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color:green;'>SS Detection System - Homepage</h1>", unsafe_allow_html=True)
     st.write("Navigate to different sections using the sidebar.")
 
 def maps_page(data_1, data_2, data_3, lat_column_1, lon_column_1, lat_column_2, lon_column_2, lat_column_3, lon_column_3):
@@ -101,247 +141,173 @@ def maps_page(data_1, data_2, data_3, lat_column_1, lon_column_1, lat_column_2, 
         display_map_with_lines(data_2, lat_column_2, lon_column_2, "Map - The Location of Request for SIM Swap")
     elif subpage_selection == "Location of Latest Transaction":
         display_map_with_lines(data_3, lat_column_3, lon_column_3, "Map - Location of Latest Transaction")
+def generate_dummy_locations(true_lat, true_lon, k=5, radius=0.01):
+    """Generate k locations, including the true location and k-1 dummy locations."""
+    locations = [(true_lat, true_lon)]  # Include true location
+    for _ in range(k - 1):
+        lat_offset = random.uniform(-radius, radius)
+        lon_offset = random.uniform(-radius, radius)
+        dummy_lat = true_lat + lat_offset
+        dummy_lon = true_lon + lon_offset
+        locations.append((dummy_lat, dummy_lon))
+    return locations
 
 def search_page(data_1, data_2, data_3, lat_column_1, lon_column_1, lat_column_2, lon_column_2, lat_column_3, lon_column_3):
     st.title("Search Section")
 
-    # Search Section
-    st.header("Search Section")
+    # Dummy location configuration
+    st.subheader("Dummy Location Settings")
+    use_dummy_locations = st.checkbox("Enable Dummy Locations", value=False)
+    k = st.slider("Number of Locations (1 Real + k-1 Dummy)", min_value=1, max_value=50, value=5, disabled=not use_dummy_locations)
+    radius = st.slider("Radius for Dummy Locations (degrees)", min_value=0.001, max_value=0.1, value=0.01, disabled=not use_dummy_locations)
 
-    # Get a list of all unique locations from data_2 (Location of Request for SIM Swap)
     locations = data_2['Location'].dropna().unique()
 
-    # Create a selectbox for the user to select a location
-    selected_location = st.selectbox("Select Location", options=locations, index=None)
+    selected_location = st.selectbox("Select Location. (Location of Request for SIM Swap) *", options=locations, index=None)
+    search_name = st.text_input("Enter Name or ID number for Search *")
+    id_number = st.text_input("Enter Your ID Number for SIM Swap *")
+    speed_threshold = st.number_input("Enter Speed Threshold (km/h) *", min_value=0.0, step=0.1)
 
-    # Create a text input for the user to search for a name
-    search_name = st.text_input("Enter Name or ID number for Search:")
-
-    # Add a text input for entering ID number
-    id_number = st.text_input("Enter ID Number for SIM Swap:")
-
-    search_button_key = "search_button_key_col1"  # Unique key for the search button in column 1
+    search_button_key = "search_button_key_col1"
 
     if st.button("Search", key=search_button_key):
-        if not search_name:
-            st.error("Please enter a name for the search.")
-        elif not selected_location:
-            st.error("Please select a location.")
-        else:
-            # Filter data based on the provided name
-            search_result_1 = data_1[data_1['First Name'].str.contains(search_name, case=False, na=False)]
-            search_result_3 = data_3[data_3['ID No.'].astype(str).str.contains(search_name, case=False, na=False)]
+        start_time = time.time()
+        
+        if not search_name or not selected_location or not id_number or speed_threshold is None:
+            st.error("All fields marked with * are required.")
+            print(f"Total processing time: {time.time() - start_time:.6f} seconds")
+            return
 
-            # Combine search results into a single DataFrame
-            combined_search_data = pd.concat([search_result_1, search_result_3])
+        # Verify ID against transaction file (data_3)
+        transaction_id_numbers = data_3['ID No.'].astype(str).tolist()
+        if id_number.strip() not in transaction_id_numbers:
+            st.error("The ID number entered is not found in the transaction data.")
+            print(f"Total processing time: {time.time() - start_time:.6f} seconds")
+            return
 
-            # Convert latitude and longitude columns to numeric
-            combined_search_data[lat_column_1] = pd.to_numeric(combined_search_data[lat_column_1], errors='coerce')
-            combined_search_data[lon_column_1] = pd.to_numeric(combined_search_data[lon_column_1], errors='coerce')
+        search_result_1 = data_1[data_1['First Name'].str.contains(search_name, case=False, na=False)]
+        search_result_3 = data_3[data_3['ID No.'].astype(str).str.contains(search_name, case=False, na=False)]
+        combined_search_data = pd.concat([search_result_1, search_result_3])
 
-            # Drop rows with NaN values in latitude or longitude columns
-            combined_search_data = combined_search_data.dropna(subset=[lat_column_1, lon_column_1])
+        if combined_search_data.empty:
+            st.warning(f"No matching records found for '{search_name}'.")
+            print(f"Total processing time: {time.time() - start_time:.6f} seconds")
+            return
 
-            # Check if search results are empty after dropping NaN values
-            if combined_search_data.empty:
-                st.warning(f"No matching records found for '{search_name}'.")
-            else:
-                # Display all search results on the map
-                    # Display all search results on the map
-                # Display all search results on the map
-                st.write("### Search Results Map")
+        # Display all search results on the map
+        st.write("### Search Results Map")
+        map_center = [combined_search_data[lat_column_1].mean(), combined_search_data[lon_column_1].mean()]
+        my_map = folium.Map(location=map_center, zoom_start=10, tiles="OpenStreetMap")
 
-                # Create a folium map for all search results
-                map_center = [combined_search_data[lat_column_1].mean(), combined_search_data[lon_column_1].mean()]
-                my_map = folium.Map(location=map_center, zoom_start=10, tiles="OpenStreetMap")
+        # Plot selected location with optional dummy locations
+        selected_lat = data_2[data_2['Location'] == selected_location][lat_column_2].iloc[0]
+        selected_lon = data_2[data_2['Location'] == selected_location][lon_column_2].iloc[0]
+        selected_locations = [(selected_lat, selected_lon)]
+        if use_dummy_locations:
+            selected_locations = generate_dummy_locations(selected_lat, selected_lon, k, radius)
+        
+        for i, (lat, lon) in enumerate(selected_locations):
+            popup = f"Selected Location: {selected_location}" if i == 0 else f"Dummy Location {i}"
+            color = 'green' if i == 0 else 'gray'
+            folium.Marker([lat, lon], popup=popup, icon=folium.Icon(color=color)).add_to(my_map)
 
-                # Plot selected location
-                selected_lat = data_2[data_2['Location'] == selected_location][lat_column_2].iloc[0]
-                selected_lon = data_2[data_2['Location'] == selected_location][lon_column_2].iloc[0]
-                selected_name = selected_location
-                folium.Marker([selected_lat, selected_lon], popup=f"Selected Location: {selected_name}",
-                            icon=folium.Icon(color='green')).add_to(my_map)
+        # Plot recent transaction location with optional dummy locations
+        recent_transaction_lat = data_3[lat_column_3].mean()
+        recent_transaction_lon = data_3[lon_column_3].mean()
+        recent_transaction_name = data_3['Location Name'].iloc[0]
+        transaction_locations = [(recent_transaction_lat, recent_transaction_lon)]
+        if use_dummy_locations:
+            transaction_locations = generate_dummy_locations(recent_transaction_lat, recent_transaction_lon, k, radius)
 
-                # Plot recent transaction location
-                recent_transaction_lat = data_3[lat_column_3].mean()
-                recent_transaction_lon = data_3[lon_column_3].mean()
-                recent_transaction_name = data_3['Location Name'].iloc[0]  # 'Location Name'
-                folium.Marker([recent_transaction_lat, recent_transaction_lon], popup=f"{recent_transaction_name}",
-                            icon=folium.Icon(color='blue')).add_to(my_map)
+        for i, (lat, lon) in enumerate(transaction_locations):
+            popup = f"{recent_transaction_name}" if i == 0 else f"Dummy Transaction {i}"
+            color = 'blue' if i == 0 else 'gray'
+            folium.Marker([lat, lon], popup=popup, icon=folium.Icon(color=color)).add_to(my_map)
 
-                # Plot connectivity location
-                connectivity_lat = data_1[lat_column_1].mean()
-                connectivity_lon = data_1[lon_column_1].mean()
-                connectivity_name = data_1['Location Name'].iloc[0]  #  'Location Name'
-                folium.Marker([connectivity_lat, connectivity_lon], popup=f"{connectivity_name}",
-                            icon=folium.Icon(color='red')).add_to(my_map)
+        # Plot connectivity location with optional dummy locations
+        connectivity_lat = data_1[lat_column_1].mean()
+        connectivity_lon = data_1[lon_column_1].mean()
+        connectivity_name = data_1['Location Name'].iloc[0]
+        connectivity_locations = [(connectivity_lat, connectivity_lon)]
+        if use_dummy_locations:
+            connectivity_locations = generate_dummy_locations(connectivity_lat, connectivity_lon, k, radius)
 
-                # Plot search result locations
-                for index, row in combined_search_data.iterrows():
-                    location_name = row['Location Name']  # the column name is 'Location Name'
-                    
-                # Draw lines to form a triangle between locations
-                folium.PolyLine(locations=[[selected_lat, selected_lon], [recent_transaction_lat, recent_transaction_lon]],
-                                color='black', weight=2.5, opacity=1).add_to(my_map)
+        for i, (lat, lon) in enumerate(connectivity_locations):
+            popup = f"{connectivity_name}" if i == 0 else f"Dummy Connectivity {i}"
+            color = 'red' if i == 0 else 'gray'
+            folium.Marker([lat, lon], popup=popup, icon=folium.Icon(color=color)).add_to(my_map)
 
-                folium.PolyLine(locations=[[recent_transaction_lat, recent_transaction_lon], [connectivity_lat, connectivity_lon]],
-                                color='black', weight=2.5, opacity=1).add_to(my_map)
+        # Draw lines between true locations (not dummy ones)
+        folium.PolyLine(locations=[[selected_lat, selected_lon], [recent_transaction_lat, recent_transaction_lon]],
+                        color='red', weight=2.5, opacity=1).add_to(my_map)
+        folium.PolyLine(locations=[[recent_transaction_lat, recent_transaction_lon], [connectivity_lat, connectivity_lon]],
+                        color='red', weight=2.5, opacity=1).add_to(my_map)
+        folium.PolyLine(locations=[[connectivity_lat, connectivity_lon], [selected_lat, selected_lon]],
+                        color='red', weight=2.5, opacity=1).add_to(my_map)
 
-                folium.PolyLine(locations=[[connectivity_lat, connectivity_lon], [selected_lat, selected_lon]],
-                                color='black', weight=2.5, opacity=1).add_to(my_map)
+        folium_static(my_map)
 
-                # Display the map
-                folium_static(my_map)
+        # Calculate distances
+        distance_to_connectivity = calculate_distance(selected_lat, selected_lon, connectivity_lat, connectivity_lon)
+        distance_to_transaction = calculate_distance(selected_lat, selected_lon, recent_transaction_lat, recent_transaction_lon)
+        distance_between_locations = calculate_distance(recent_transaction_lat, recent_transaction_lon, connectivity_lat, connectivity_lon)
+        area_covered = calculate_area(selected_lat, selected_lon, recent_transaction_lat, recent_transaction_lon, connectivity_lat, connectivity_lon)
 
-                
-                st.write("### Distances:")# Create a dictionary with the data
-                data = {
-                    "Type of Location": [f"Location of Request of Request of S.S)", f"Location of Recent Transaction)", "Location of Recent Connectivity"],
-                    "Addresses": [selected_location, recent_transaction_name, connectivity_name],
-                    "Name. (Analysis.)": ["A", "B", "C"]
-                }
-               
-                # Calculate distances and area, and display them
-                distance_to_connectivity = calculate_distance(selected_lat, selected_lon, connectivity_lat, connectivity_lon)
-                distance_to_transaction = calculate_distance(selected_lat, selected_lon, recent_transaction_lat, recent_transaction_lon)
-                distance_between_locations = calculate_distance(recent_transaction_lat, recent_transaction_lon, connectivity_lat, connectivity_lon)
-                area_covered = calculate_area(selected_lat, selected_lon, recent_transaction_lat, recent_transaction_lon, connectivity_lat, connectivity_lon)
-                
-                # Create a DataFrame from the dictionary
-                df = pd.DataFrame(data)
-                # Create a dictionary with the location names and their corresponding codes
-                location_data = {
-                    
-                    "Location Code": ["A", "B", "C"]
-                }
+        st.write("### Distances:")
+        st.write(f"Distance from Request to Connectivity: {distance_to_connectivity:.2f} km")
+        st.write(f"Distance from Request to Transaction: {distance_to_transaction:.2f} km")
+        st.write(f"Distance between Transaction and Connectivity: {distance_between_locations:.2f} km")
+        st.write(f"Area Covered: {area_covered:.2f} sq km")
 
-                # Create a DataFrame from the location data
-                location_df = pd.DataFrame(location_data)
+        # Calculate speed
+        request_date = data_2['Date'].iloc[0]
+        request_time = data_2['Time'].iloc[0]
+        connectivity_date = data_1['Date'].iloc[0]
+        connectivity_time = data_1['Time'].iloc[0]
 
-                # Create a dictionary with the distance data
-                distance_data = {
-                    "From": ["A", "A", "B"],
-                    "To": ["B", "C", "C"],
-                    "Distance (km)": [distance_to_transaction, distance_to_connectivity, distance_between_locations]
-                }
+        request_datetime = datetime.strptime(f"{request_date} {request_time}", "%m/%d/%Y %H:%M")
+        connectivity_datetime = datetime.strptime(f"{connectivity_date} {connectivity_time}", "%m/%d/%Y %H:%M")
 
-                # Create a DataFrame from the distance data
-                distance_df = pd.DataFrame(distance_data)
+        time_diff = abs((request_datetime - connectivity_datetime).total_seconds() / 3600)
+        speed = distance_to_connectivity / time_diff
 
-               
-                # Create a new DataFrame combining the location names and distances
-                combined_df = pd.merge(distance_df, location_df, left_on='From', right_on='Location Code', how='left')
-                combined_df.rename(columns={'Location Name': 'From Name', 'Location Code': 'From '}, inplace=True)
-                combined_df = pd.merge(combined_df, location_df, left_on='To', right_on='Location Code', how='left')
-                combined_df.rename(columns={'Location Name': 'To Name', 'Location Code': 'To '}, inplace=True)
+        st.write(f"The calculated speed from Connectivity to Request is: {speed:.2f} km/h")
 
-                # Rearrange the columns
-                combined_df = combined_df[['From', 'To', 'Distance (km)']]
+        validity = "valid" if speed <= speed_threshold else "suspicious"
+        st.write(f"The SIM swap request is marked as **{validity}**.")
 
-                # Display all columns
-                 # Display the combined DataFrame as a table
-                st.write("Location Names and Distances:")
-                st.write(df)
-                st.write("Distances Between Locations")
-                st.write(combined_df)
+        # Display search results
+        st.write("### Search Results:")
+        st.write(combined_search_data[['First Name', 'Last Name', 'ID No.', 'Phone Number']])
 
-       
-                # Define location names
-                location_names = ["Location of Request", "Location of Transaction", "Location of Connectivity"]
+        # SIM Swap Section
+        st.header("SIM Swap Section")
+        st.write("Here you can perform SIM swap between two numbers.")
 
-                # Define the distances
-                distances = [distance_to_transaction, distance_to_connectivity, distance_between_locations]
-
-                # Find the longest distance and its index
-                max_distance_index = distances.index(max(distances))
-
-                # Define the coordinates of the vertices based on the longest distance
-                if max_distance_index == 0:
-                    # Transaction to Connectivity is the longest distance
-                    B = (0, 0)
-                    A = (distances[0], 0)
-                    C = (distances[2], distances[1])
-                elif max_distance_index == 1:
-                    # Request to Connectivity is the longest distance
-                    C = (0, 0)
-                    A = (distances[2], 0)
-                    B = (distances[0], distances[1])
-                else:
-                    # Request to Transaction is the longest distance
-                    A = (0, 0)
-                    B = (distances[1], 0)
-                    C = (distances[0], distances[2])
-
-                # Plot the triangle
-                fig, ax = plt.subplots(figsize=(10, 8))
-                ax.plot([A[0], B[0]], [A[1], B[1]], 'b-', label=f'Distance AB: {format(distances[0], ".2f")} km')  # Line AB
-                ax.plot([B[0], C[0]], [B[1], C[1]], 'r-', label=f'Distance BC: {format(distances[1], ".2f")}km')  # Line BC
-                ax.plot([C[0], A[0]], [C[1], A[1]], 'g-', label=f'Distance CA: {format(distances[2], ".2f")}km')  # Line CA
-                ax.plot(A[0], A[1], 'ko')  # Point A
-                ax.text(A[0], A[1], 'A\n' + location_names[0], ha='right', va='bottom')
-                ax.plot(B[0], B[1], 'ko')  # Point B
-                ax.text(B[0], B[1], 'B\n' + location_names[1], ha='right', va='top')
-                ax.plot(C[0], C[1], 'ko')  # Point C
-                ax.text(C[0], C[1], 'C\n' + location_names[2], ha='left', va='top')
-
-                # Set axis labels
-                ax.set_xlabel('X (km)')
-                ax.set_ylabel('Y (km)')
-
-                # Set aspect ratio to equal
-                ax.set_aspect('equal', adjustable='box')
-
-                # Show grid lines
-                ax.grid(True)
-
-                # Add legend
-                ax.legend()
-
-                # Add title
-                ax.set_title('Triangle formed by the three locations')
-
-                # Show plot
-                st.pyplot(fig)
-                
-                #Display the Area Covered
-                st.write("### The area covered:")
-                st.markdown(f"<p style='font-size:20px'>{area_covered, "Squared Kilometres"}</p>", unsafe_allow_html=True)
-                
-                
-
-                # Perform SIM swap and display results (if applicable)
-                if distance_to_transaction > 1000:
-                    st.warning("SIM swap is not allowed due to location variance.")
-                else:
-                    # Display search results
-                    st.write("### Search Results:")
-                    st.write(combined_search_data[['First Name', 'Last Name', 'ID No.','Phone Number']])
-
-                    # SIM Swap Section
-                    st.header("SIM Swap Section")
-                    st.write("Here you can perform SIM swap between two numbers.")
-
-                    if not combined_search_data.empty and id_number:
-                        transaction_id_numbers = data_3['ID No.'].astype(str).tolist()
-                        if id_number in transaction_id_numbers:
-                            st.write(f"ID number {id_number} is valid. Proceed with SIM swap.")
-                            first_number = combined_search_data.iloc[0]['Phone Number']
-                            st.write(f"The first number from search results: {first_number}")
-                            number2 = st.text_input("Enter the second number:")
-                            if st.button("Swap"):
-                                if not number2:
-                                    st.error("Please enter the second number.")
-                                else:
-                                    st.write(f"You have requested to swap {first_number} with {number2}.")
-                                    # Perform SIM swap here using the numbers provided
+        if not combined_search_data.empty:
+            if id_number in transaction_id_numbers:
+                if validity == "valid":
+                    st.write(f"ID number {id_number} is valid. Proceed with SIM swap.")
+                    first_number = combined_search_data.iloc[0]['Phone Number']
+                    st.write(f"The first number from search results: {first_number}")
+                    number2 = st.text_input("Enter the second number:")
+                    if st.button("Swap"):
+                        if not number2:
+                            st.error("Please enter the second number.")
                         else:
-                            st.error(f"ID number {id_number} is not valid for SIM swap.")
-                    else:
-                        st.warning("Please enter a valid ID number.")
-                    
+                            st.write(f"You have requested to swap {first_number} with {number2}.")
+                            # Perform SIM swap here using the numbers provided
+                else:
+                    st.error("SIM swap cannot proceed as the request is marked suspicious.")
+            else:
+                st.error(f"ID number {id_number} is not found in the transaction data.")
+        else:
+            st.warning("No matching user data found for SIM swap.")
 
+        print(f"Total processing time: {time.time() - start_time:.6f} seconds")
+        
 def main():
-    st.set_page_config(page_title="SIM Swap Detection.", page_icon=":earth_americas:")
+    st.set_page_config(page_title="SIM Swap .", page_icon=":earth_americas:")
 
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -364,13 +330,9 @@ def main():
             else:
                 st.error("Authentication failed. Please check your username and password.")
     else:
-        # Load data from the first CSV file
+        # Load data from the CSV files
         data_1 = load_data(file_location_1, "The Location of most recent connectivity")
-
-        # Load data from the second CSV file
         data_2 = load_data(file_location_2, "The Location of Request for Swap")
-
-        # Load data from the third CSV file
         data_3 = load_data(file_location_3, "Location of Latest Transaction")
 
         # Automatically select latitude and longitude columns
@@ -384,7 +346,7 @@ def main():
         maps_button_key = "maps_button_key"  # Unique key for the maps button
         search_button_key = "search_button_key"  # Unique key for the search button
 
-        selected_page = st.sidebar.radio("Select Page", ["Home", "Search"])
+        selected_page = st.sidebar.radio("Select Page", ["Home", "Maps", "Search"])
 
         if selected_page == "Home":
             home_page()
@@ -395,3 +357,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+end_time = time.time()
+elapsed_time = end_time - start_time
+print(f'Processing time: {elapsed_time:.6f} seconds')
